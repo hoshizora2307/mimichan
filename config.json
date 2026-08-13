@@ -1,0 +1,10 @@
+{
+  "character_name": "ミミちゃん",
+  "model": "claude-sonnet-4-5",
+  "max_tokens": 1024,
+  "history_file": "data/history.json",
+  "memory_file": "data/memory.md",
+  "persona_file": "persona.md",
+  "summary_trigger_messages": 40,
+  "keep_recent_messages": 12
+}

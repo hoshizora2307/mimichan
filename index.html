@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>{{ name }}とチャット</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+    background: #7494c0;
+    display: flex; justify-content: center;
+  }
+  .app {
+    width: 100%; max-width: 480px; height: 100dvh;
+    display: flex; flex-direction: column;
+    background: #7494c0;
+    box-shadow: 0 0 24px rgba(0,0,0,.25);
+  }
+
+  /* ヘッダー */
+  header {
+    background: #273246; color: #fff;
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  header img {
+    width: 38px; height: 38px; border-radius: 50%;
+    object-fit: cover; background: #fff;
+  }
+  header .title { font-size: 16px; font-weight: 700; }
+  header .status { font-size: 11px; color: #9fe870; }
+  header .spacer { flex: 1; }
+  header button {
+    background: none; border: 1px solid rgba(255,255,255,.4); color: rgba(255,255,255,.8);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  header button:hover { background: rgba(255,255,255,.1); }
+
+  /* チャット領域 */
+  #chat {
+    flex: 1; overflow-y: auto; padding: 14px 12px 8px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .row { display: flex; align-items: flex-end; gap: 8px; margin-top: 8px; }
+  .row.user { justify-content: flex-end; }
+  .row .avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    object-fit: cover; background: #fff; flex-shrink: 0;
+    align-self: flex-start;
+  }
+  .row.cont .avatar { visibility: hidden; }
+  .row.cont { margin-top: 2px; }
+  .bubble-area { display: flex; flex-direction: column; max-width: 72%; }
+  .sender { font-size: 11px; color: #e8eef7; margin: 0 0 3px 4px; }
+  .bubble {
+    padding: 9px 12px; border-radius: 16px;
+    font-size: 14.5px; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word;
+    animation: pop .18s ease-out;
+  }
+  @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .row.ai .bubble { background: #fff; color: #222; border-top-left-radius: 4px; }
+  .row.user .bubble { background: #8de055; color: #143601; border-bottom-right-radius: 4px; }
+  .row.user .bubble-area { align-items: flex-end; }
+
+  /* タイピング中 */
+  .typing .bubble { display: flex; gap: 5px; padding: 13px 14px; }
+  .typing .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #b6bec9;
+    animation: blink 1.2s infinite both;
+  }
+  .typing .dot:nth-child(2) { animation-delay: .2s; }
+  .typing .dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+
+  /* 入力欄 */
+  footer { flex-shrink: 0; background: #fff; }
+  .inputbar { display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px; }
+  #input {
+    flex: 1; border: none; outline: none; resize: none;
+    font-size: 15px; font-family: inherit; line-height: 1.5;
+    max-height: 110px; padding: 8px 4px;
+  }
+  #send {
+    background: #06c755; color: #fff; border: none;
+    border-radius: 50%; width: 40px; height: 40px;
+    font-size: 18px; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .15s;
+  }
+  #send:disabled { opacity: .35; cursor: default; }
+  .credit {
+    text-align: center; font-size: 10px; color: #9aa3af;
+    padding: 3px 0 6px; background: #fff;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <img src="/static/avatar.png" alt="">
+    <div>
+      <div class="title">{{ name }}</div>
+      <div class="status">● オンライン</div>
+    </div>
+    <div class="spacer"></div>
+    <button onclick="resetChat()">履歴クリア</button>
+  </header>
+
+  <div id="chat"></div>
+
+  <footer>
+    <div class="inputbar">
+      <textarea id="input" rows="1" placeholder="メッセージを入力"></textarea>
+      <button id="send" onclick="send()">➤</button>
+    </div>
+    <div class="credit">© 株式会社MONDOCOLO / Produced by MONDOCOLO STUDIO</div>
+  </footer>
+</div>
+
+<script>
+const chatEl = document.getElementById("chat");
+const inputEl = document.getElementById("input");
+const sendEl = document.getElementById("send");
+const NAME = {{ name | tojson }};
+let busy = false;
+
+function scrollBottom() { chatEl.scrollTop = chatEl.scrollHeight; }
+
+function addBubble(role, text, cont = false) {
+  const row = document.createElement("div");
+  row.className = "row " + (role === "user" ? "user" : "ai") + (cont ? " cont" : "");
+  if (role !== "user") {
+    const av = document.createElement("img");
+    av.className = "avatar"; av.src = "/static/avatar.png";
+    row.appendChild(av);
+  }
+  const area = document.createElement("div");
+  area.className = "bubble-area";
+  if (role !== "user" && !cont) {
+    const s = document.createElement("div");
+    s.className = "sender"; s.textContent = NAME;
+    area.appendChild(s);
+  }
+  const b = document.createElement("div");
+  b.className = "bubble"; b.textContent = text;
+  area.appendChild(b);
+  row.appendChild(area);
+  chatEl.appendChild(row);
+  scrollBottom();
+  return row;
+}
+
+// ミミちゃんの返事は改行2つ区切りで複数の吹き出しに分けて、少しずつ表示
+async function addAiBubbles(text) {
+  const parts = text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 450 + Math.min(parts[i].length * 12, 500)));
+    addBubble("ai", parts[i], i > 0);
+  }
+}
+
+function showTyping() {
+  const row = document.createElement("div");
+  row.className = "row ai typing";
+  row.innerHTML = `<img class="avatar" src="/static/avatar.png">
+    <div class="bubble-area"><div class="bubble">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div></div>`;
+  chatEl.appendChild(row);
+  scrollBottom();
+  return row;
+}
+
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text || busy) return;
+  busy = true; sendEl.disabled = true;
+  inputEl.value = ""; autoResize();
+  addBubble("user", text);
+  const typing = showTyping();
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text }),
+    });
+    const data = await res.json();
+    typing.remove();
+    if (data.reply) await addAiBubbles(data.reply);
+    else addBubble("ai", "ごめん、エラーが起きちゃった💦 " + (data.error || ""));
+  } catch (e) {
+    typing.remove();
+    addBubble("ai", "通信エラーだ〜💦 サーバーが動いてるか確認してみて!");
+  }
+  busy = false; sendEl.disabled = false;
+  inputEl.focus();
+}
+
+async function resetChat() {
+  if (!confirm("チャット履歴をクリアする?(ミミちゃんの長期記憶は残るよ)")) return;
+  await fetch("/api/reset", { method: "POST" });
+  chatEl.innerHTML = "";
+  greet();
+}
+
+function greet() {
+  addAiBubbles("うぇーい!来てくれてありがと〜!!😆✨\n\n今日も元気にいこ〜!なんでも話してね🔥");
+}
+
+// 履歴の復元
+(async () => {
+  try {
+    const res = await fetch("/api/history");
+    const history = await res.json();
+    if (history.length === 0) { greet(); return; }
+    for (const m of history) {
+      if (m.role === "user") addBubble("user", m.text);
+      else {
+        const parts = m.text.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+        parts.forEach((p, i) => addBubble("ai", p, i > 0));
+      }
+    }
+  } catch (e) { greet(); }
+})();
+
+// 入力欄の自動リサイズ & Enter送信 (Shift+Enterで改行)
+function autoResize() {
+  inputEl.style.height = "auto";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 110) + "px";
+}
+inputEl.addEventListener("input", autoResize);
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault(); send();
+  }
+});
+</script>
+</body>
+</html>
