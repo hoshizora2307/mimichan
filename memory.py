@@ -3,7 +3,10 @@
 3層の記憶を持つ:
 1. 短期記憶: 現在の会話履歴 (history.json に永続化。再起動しても続きから話せる)
 2. 長期記憶: ユーザーに関する事実・過去の会話の要約 (memory.md)
-3. 自動要約: 履歴が長くなったら古い部分をAI自身に要約させ、長期記憶へ移す
+3. 自動要約: 履歴が長くなったらAIに要約させ、長期記憶へ移す
+
+メッセージは OpenAI Chat Completions 形式で保存する
+(Gemini / Claude どちらもOpenAI互換エンドポイント経由で使うため)。
 """
 
 from __future__ import annotations
@@ -37,8 +40,12 @@ class MemoryManager:
         with open(self.history_file, "w", encoding="utf-8") as f:
             json.dump(self.messages, f, ensure_ascii=False, indent=1)
 
-    def add(self, role: str, content) -> None:
-        self.messages.append({"role": role, "content": content})
+    def add(self, role: str, content: str) -> None:
+        self.add_raw({"role": role, "content": content})
+
+    def add_raw(self, message: dict) -> None:
+        """tool_calls 付きassistantメッセージや role='tool' もそのまま保存する。"""
+        self.messages.append(message)
         self.save_history()
 
     def reset_history(self) -> None:
@@ -63,38 +70,33 @@ class MemoryManager:
     def needs_summary(self) -> bool:
         return len(self.messages) >= self.summary_trigger
 
-    def compress(self, client, model: str) -> None:
-        """古い履歴をAIに要約させて長期記憶に移し、直近だけを残す。
+    def compress(self, summarize) -> None:
+        """古い履歴を要約して長期記憶に移し、直近だけを残す。
 
-        注意: tool_use と tool_result のペアが分断されないよう、
-        残す先頭が user の通常メッセージになる位置まで調整する。
+        summarize: プロンプト文字列を受け取り要約文字列を返す関数
+                   (どのAIプロバイダーを使うかは呼び出し側が決める)
+
+        注意: assistantのツール呼び出しと role='tool' の結果ペアが
+        分断されないよう、残す先頭が user の通常メッセージになる位置まで調整する。
         """
         cut = len(self.messages) - self.keep_recent
         while cut < len(self.messages):
             m = self.messages[cut]
-            if m["role"] == "user" and isinstance(m["content"], str):
+            if m.get("role") == "user" and isinstance(m.get("content"), str):
                 break
             cut += 1
         if cut <= 0:
             return
 
         old = self.messages[:cut]
-        transcript = _to_text(old)
-        response = client.messages.create(
-            model=model,
-            max_tokens=1024,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "以下はAIアシスタントとユーザーの会話ログです。"
-                    "今後の会話で役立つ情報(ユーザーの好み・状況・決定事項・話題の流れ)を"
-                    "箇条書きで簡潔に要約してください。要約だけを出力してください。\n\n"
-                    + transcript
-                ),
-            }],
-        )
-        summary = response.content[0].text.strip()
-        self.append_long_term(summary, section="会話の要約")
+        summary = summarize(
+            "以下はAIアシスタントとユーザーの会話ログです。"
+            "今後の会話で役立つ情報(ユーザーの好み・状況・決定事項・話題の流れ)を"
+            "箇条書きで簡潔に要約してください。要約だけを出力してください。\n\n"
+            + _to_text(old)
+        ).strip()
+        if summary:
+            self.append_long_term(summary, section="会話の要約")
         self.messages = self.messages[cut:]
         self.save_history()
 
@@ -102,11 +104,8 @@ class MemoryManager:
 def _to_text(messages: list[dict]) -> str:
     lines = []
     for m in messages:
-        content = m["content"]
-        if isinstance(content, str):
-            lines.append(f"{m['role']}: {content}")
-        elif isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    lines.append(f"{m['role']}: {block['text']}")
+        role = m.get("role")
+        content = m.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            lines.append(f"{role}: {content}")
     return "\n".join(lines)

@@ -1,0 +1,12 @@
+# 会話履歴・長期記憶(個人情報を含むため絶対にcommitしない)
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 環境変数・秘密情報
+.env
+*.key

@@ -1,10 +1,11 @@
 {
   "character_name": "ミミちゃん",
-  "model": "claude-sonnet-4-5",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash",
   "max_tokens": 1024,
-  "history_file": "data/history.json",
-  "memory_file": "data/memory.md",
   "persona_file": "persona.md",
   "summary_trigger_messages": 40,
-  "keep_recent_messages": 12
+  "keep_recent_messages": 12,
+
+  "_providers_memo": "provider は 'gemini' か 'anthropic'。gemini なら GEMINI_API_KEY、anthropic なら ANTHROPIC_API_KEY を環境変数に設定。anthropic の場合の model 例: claude-sonnet-4-5"
 }

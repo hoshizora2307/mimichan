@@ -11,47 +11,63 @@ from __future__ import annotations
 import ast
 import operator
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
+JST = ZoneInfo("Asia/Tokyo")  # サーバーが海外にあっても日本時間で答える
+
+# OpenAI Chat Completions 形式のツール定義 (Gemini / Claude 両対応)
 TOOL_DEFINITIONS = [
     {
-        "name": "calculator",
-        "description": "数式を正確に計算する。四則演算・べき乗・剰余に対応。例: '(1200 * 1.1) / 3'",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "expression": {"type": "string", "description": "計算する数式"}
+        "type": "function",
+        "function": {
+            "name": "calculator",
+            "description": "数式を正確に計算する。四則演算・べき乗・剰余に対応。例: '(1200 * 1.1) / 3'",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "計算する数式"}
+                },
+                "required": ["expression"],
             },
-            "required": ["expression"],
         },
     },
     {
-        "name": "current_time",
-        "description": "現在の日付と時刻を取得する。「今日」「今何時」などの質問で必ず使うこと。",
-        "input_schema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "remember",
-        "description": (
-            "ユーザーに関する新しい情報(名前・好み・目標・状況など)や、"
-            "覚えておくべき決定事項を長期記憶に保存する。"
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "fact": {"type": "string", "description": "記憶する内容(1文で簡潔に)"}
-            },
-            "required": ["fact"],
+        "type": "function",
+        "function": {
+            "name": "current_time",
+            "description": "現在の日付と時刻を取得する。「今日」「今何時」などの質問で必ず使うこと。",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
-        "name": "web_search",
-        "description": "最新情報や知らないことをWebで検索する。ニュース・最新の事実確認に使う。",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "検索キーワード"}
+        "type": "function",
+        "function": {
+            "name": "remember",
+            "description": (
+                "ユーザーに関する新しい情報(名前・好み・目標・状況など)や、"
+                "覚えておくべき決定事項を長期記憶に保存する。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fact": {"type": "string", "description": "記憶する内容(1文で簡潔に)"}
+                },
+                "required": ["fact"],
             },
-            "required": ["query"],
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "最新情報や知らないことをWebで検索する。ニュース・最新の事実確認に使う。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "検索キーワード"}
+                },
+                "required": ["query"],
+            },
         },
     },
 ]
@@ -119,7 +135,7 @@ def run_tool(name: str, tool_input: dict, memory) -> str:
     if name == "calculator":
         return calculator(tool_input.get("expression", ""))
     if name == "current_time":
-        now = datetime.now()
+        now = datetime.now(JST)
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         return now.strftime(f"%Y年%m月%d日({weekdays[now.weekday()]}) %H:%M:%S")
     if name == "remember":
